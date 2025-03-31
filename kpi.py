@@ -818,6 +818,83 @@ def append_to_template(df, template_file_bytes):
         st.error(traceback.format_exc())
         return None
 
+def append_to_template_fast(df, template_file_bytes):
+    """
+    Faster version that appends data to template directly using openpyxl
+    without reading all sheets into pandas dataframes.
+    """
+    try:
+        # Load the workbook directly with openpyxl
+        with BytesIO(template_file_bytes) as template_buffer:
+            wb = openpyxl.load_workbook(template_buffer)
+            
+            # Check if Data_hub exists
+            if 'Data_hub' not in wb.sheetnames:
+                st.error("The template file does not contain a 'Data_hub' sheet.")
+                return None
+            
+            # Get the Data_hub sheet
+            ws = wb['Data_hub']
+            
+            # Get headers from the first row
+            headers = [cell.value for cell in ws[1]]
+            
+            # Define key columns for duplicate checking
+            key_columns = ['Investment name', 'Asset manager', 'Reporting Date']
+            key_indices = [headers.index(key) + 1 for key in key_columns if key in headers]
+            
+            # Read existing keys
+            existing_keys = set()
+            max_row = ws.max_row
+            
+            # Find the true max row (excluding empty trailing rows)
+            while max_row > 1:
+                if any(ws.cell(row=max_row, column=i).value for i in range(1, len(headers) + 1)):
+                    break
+                max_row -= 1
+            
+            # Collect existing keys
+            for row in range(2, max_row + 1):
+                key_values = tuple(str(ws.cell(row=row, column=i).value or '') for i in key_indices)
+                if any(key_values):
+                    existing_keys.add(key_values)
+            
+            # Filter rows to append
+            rows_to_append = []
+            for _, row_data in df.iterrows():
+                key_values = tuple(str(row_data.get(headers[i-1], '') or '') for i in key_indices)
+                if not (key_values in existing_keys and any(key_values)):
+                    rows_to_append.append(row_data)
+            
+            if not rows_to_append:
+                st.info("No new rows added. All data already exists in the template.")
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                return output
+                
+            # Add new rows directly to worksheet
+            for row_data in rows_to_append:
+                max_row += 1
+                for col_idx, header in enumerate(headers, 1):
+                    if header in df.columns:
+                        value = row_data.get(header)
+                        ws.cell(row=max_row, column=col_idx, value=value)
+            
+            # Save the workbook to BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            st.info(f"Added {len(rows_to_append)} new rows to the Data_hub sheet")
+            return output
+            
+    except Exception as e:
+        st.error(f"Error in fast template append: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
 def beautify_excel_output(template_bytes):
     """
     Apply beautiful formatting to the output template without using Table objects
@@ -1156,7 +1233,7 @@ def process_combined_files(reporting_date, all_files, watchlist_file, template_f
     
     # If template file provided, append data to it
     if template_file is not None:
-        basic_template = append_to_template(final_result, template_file.getvalue())
+        basic_template = append_to_template_fast(final_result, template_file.getvalue())
         if basic_template:
             modified_template = beautify_excel_output(basic_template.getvalue())
         else:
