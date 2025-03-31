@@ -7,7 +7,6 @@ import tempfile
 from datetime import datetime, timedelta
 import requests
 import base64
-from pandas_datareader import data as pdr
 import yfinance as yf
 from io import BytesIO
 import xml.etree.ElementTree as ET
@@ -67,6 +66,7 @@ def safe_concat(dataframes):
 def get_exchange_rate(date_obj, method="fixed"):
     """
     Get USD/EUR exchange rate for a given date using various methods.
+    Compatible with Python 3.12 (no pandas_datareader dependency)
     """
     # Format date as string
     date_str = date_obj.strftime("%Y-%m-%d")
@@ -109,22 +109,26 @@ def get_exchange_rate(date_obj, method="fixed"):
             return FIXED_RATE
             
         elif method == "yahoo":
-            # Use Yahoo Finance data
-            yf.pdr_override()
+            # Use Yahoo Finance data directly without pandas_datareader
+            import yfinance as yf
             
+            # Get data for the previous 5 days in case the exact date isn't available
             end_date = date_obj + timedelta(days=1)
             start_date = date_obj - timedelta(days=5)
             
             try:
                 # Get exchange rate data
-                df = pdr.get_data_yahoo("EURUSD=X", start=start_date, end=end_date)
+                ticker_data = yf.download("EURUSD=X", start=start_date, end=end_date, progress=False)
                 
-                if not df.empty:
+                if not ticker_data.empty:
                     # Find the closest date on or before the requested date
-                    closest_date = df.index[df.index <= pd.Timestamp(date_obj)].max()
-                    if pd.notna(closest_date):
-                        # Invert the rate to get USD to EUR
-                        rate = 1 / df.loc[closest_date, 'Close']
+                    ticker_data = ticker_data.sort_index()
+                    available_dates = ticker_data.index
+                    valid_dates = [d for d in available_dates if d <= pd.Timestamp(date_obj)]
+                    
+                    if valid_dates:
+                        closest_date = max(valid_dates)
+                        rate = 1 / ticker_data.loc[closest_date, 'Close']
                         st.write(f"Retrieved Yahoo Finance exchange rate for {closest_date.strftime('%Y-%m-%d')}: {rate}")
                         return rate
             except Exception as e:
