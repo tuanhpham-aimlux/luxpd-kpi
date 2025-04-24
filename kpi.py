@@ -44,8 +44,7 @@ def safe_concat(dataframes):
     all_columns = set()
     for df in non_empty_dfs:
         all_columns.update(df.columns)
-    
-    # Ensure all dataframes have the same columns to avoid warnings
+      # Ensure all dataframes have the same columns to avoid warnings
     processed_dfs = []
     for df in non_empty_dfs:
         # Create a copy with all required columns
@@ -59,6 +58,16 @@ def safe_concat(dataframes):
     
     # Now concatenate with axis=0 explicitly specified
     if processed_dfs:
+        # Filter out any empty or all-NA columns before concatenation to avoid the FutureWarning
+        for i, df in enumerate(processed_dfs):
+            for col in df.columns:
+                if df[col].isna().all():
+                    # Replace with a column that has at least one non-NA value
+                    df[col] = df[col].copy()
+                    if len(df[col]) > 0:
+                        df.loc[df.index[0], col] = None  # This ensures column type is preserved but not all-NA
+            processed_dfs[i] = df
+        
         return pd.concat(processed_dfs, axis=0, ignore_index=True)
     else:
         return pd.DataFrame(columns=list(all_columns))
@@ -210,12 +219,17 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
         # 3. Correct PROPERTY_TYPE values
         property_type_mapping = {
             'Mixed': 'Other',
+            'MIXED': 'Other',
             'Various': 'Other',
             'MEDICAL': 'Other',
             'MULTIFAM': 'Residential',
             'WAREHOUSE': 'Logistics',
             'RETAIL': 'Retail',
-            'OFFICE': 'Office'
+            'OFFICE': 'Office',
+            'Storage': 'Other',
+            'STORAGE': 'Other',
+            'APARTMENT': 'Residential',
+            'Logistic': 'Logistics'
         }
         
         df['PROPERTY_TYPE'] = df['PROPERTY_TYPE'].apply(
@@ -260,6 +274,8 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
                 else:
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
         
+        df['Latest LTV'] = df['Latest LTV'] * 100  # Convert to percentage
+        df['Current coupon (p.a.)'] = df['Current coupon (p.a.)'] * 100  # Convert to percentage
         # Add calculated columns
         
         # Basic info columns
@@ -298,17 +314,14 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             df['Remaining loan term if fully extended'] = None
         
         # Empty loan valuation
-        df['Loan valuation'] = None
-        
-        # Weighted calculations
+        df['Loan valuation'] = None        # Weighted calculations
         df['Current coupon (p.a.) weighted'] = df['Current coupon (p.a.)'] * df['Loan amount drawn EUR']
         df['Latest LTV Weighted'] = df['Loan amount drawn EUR'] * df['Latest LTV']
-        
-        # LTV range columns
-        df['LTV < 55%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x < 0.55 else '')
-        df['55% ≤ LTV < 65%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.55 <= x < 0.65 else '')
-        df['65% ≤ LTV < 75%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.65 <= x < 0.75 else '')
-        df['75% < LTV'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x >= 0.75 else '')
+          # LTV range columns
+        df['LTV < 55%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x < 0.55 else None)
+        df['55% ≤ LTV < 65%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.55 <= x < 0.65 else None)
+        df['65% ≤ LTV < 75%'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.65 <= x < 0.75 else None)
+        df['75% < LTV'] = df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x >= 0.75 else None)
         
         # DSCR weighted
         df['DSCR (current) Weighted'] = df['Loan amount drawn EUR'] * df['DSCR (current) T12 capped']
@@ -332,9 +345,9 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             and row['Loan amount drawn (loan CCY)'] > 0 else None, 
             axis=1
         )
-        
-        # Debt yield weighted
-        df['Debt yield (current) Weighted'] = df['Loan amount drawn EUR'] * df['Debt yield (current)']
+          # Debt yield weighted
+        df['Debt yield (current)'] = df['Debt yield (current)']*100
+        df['Debt yield (current) Weighted'] = df['Loan amount drawn EUR'] * df['Debt yield (current)'] 
         
         # Empty impairment
         df['Impairment'] = None
@@ -521,10 +534,30 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                     result_df = result_df[result_df['Asset Subportfolio'] != 'Sum']
                     rows_removed = initial_row_count - len(result_df)
                     st.info(f"Removed {rows_removed} rows where 'Asset Subportfolio' = 'Sum'")
-                
-                # Rename the columns according to the mapping
+                  # Rename the columns according to the mapping
                 rename_mapping = {old_col: column_mapping[old_col] for old_col in available_columns}
                 result_df = result_df.rename(columns=rename_mapping)
+                
+                # Apply property_type_mapping to the Sector column
+                property_type_mapping = {
+                    'Mixed': 'Other',
+                    'MIXED': 'Other',
+                    'Various': 'Other',
+                    'MEDICAL': 'Other',
+                    'MULTIFAM': 'Residential',
+                    'WAREHOUSE': 'Logistics',
+                    'RETAIL': 'Retail',
+                    'OFFICE': 'Office',
+                    'Storage': 'Other',
+                    'STORAGE': 'Other',
+                    'APARTMENT': 'Residential',
+                    'Logistic': 'Logistics'
+                }
+                
+                if 'Sector' in result_df.columns:
+                    result_df['Sector'] = result_df['Sector'].apply(
+                        lambda x: property_type_mapping.get(x, x) if pd.notna(x) else x
+                    )
                 
                 # Convert numeric columns to appropriate types for calculations
                 numeric_columns = [
@@ -539,8 +572,11 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                         if 'LTV' in col or 'coupon' in col or 'yield' in col:
                             result_df[col] = pd.to_numeric(result_df[col].astype(str).str.replace('%', '').str.replace(',', '.'), errors='coerce') / 100
                         else:
-                            result_df[col] = pd.to_numeric(result_df[col].astype(str).str.replace(',', '.'), errors='coerce')
-                
+                            result_df[col] = pd.to_numeric(result_df[col].astype(str).str.replace(',', '.'), errors='coerce')                
+                # Multiply by 100 to convert decimal to percentage
+                result_df['Latest LTV'] = result_df['Latest LTV']*100
+                result_df['Current coupon (p.a.)'] = result_df['Current coupon (p.a.)']*100
+
                 # Add new calculated columns
                 # 1. Year
                 result_df['Year'] = year
@@ -584,22 +620,18 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                 if asset_manager.upper() == 'PPRE EU':
                     result_df['Seniority'] = 'Senior'
                 else:
-                    result_df['Seniority'] = None
-                
-                # 8. Current coupon (p.a.) weighted
+                    result_df['Seniority'] = None                # 8. Current coupon (p.a.) weighted
                 if 'Current coupon (p.a.)' in result_df.columns and 'Loan amount drawn EUR' in result_df.columns:
                     result_df['Current coupon (p.a.) weighted'] = result_df['Current coupon (p.a.)'] * result_df['Loan amount drawn EUR']
-                
-                # 9. Latest LTV Weighted
+                  # 9. Latest LTV Weighted
                 if 'Latest LTV' in result_df.columns and 'Loan amount drawn EUR' in result_df.columns:
                     result_df['Latest LTV Weighted'] = result_df['Loan amount drawn EUR'] * result_df['Latest LTV']
-                
-                # 10-13. LTV range columns
+                  # 10-13. LTV range columns
                 if 'Latest LTV' in result_df.columns:
-                    result_df['LTV < 55%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x < 0.55 else '')
-                    result_df['55% ≤ LTV < 65%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.55 <= x < 0.65 else '')
-                    result_df['65% ≤ LTV < 75%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.65 <= x < 0.75 else '')
-                    result_df['75% < LTV'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x >= 0.75 else '')
+                    result_df['LTV < 55%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x < 0.55 else None)
+                    result_df['55% ≤ LTV < 65%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.55 <= x < 0.65 else None)
+                    result_df['65% ≤ LTV < 75%'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and 0.65 <= x < 0.75 else None)
+                    result_df['75% < LTV'] = result_df['Latest LTV'].apply(lambda x: x if pd.notna(x) and x >= 0.75 else None)
                 
                 # 14. DSCR (current) Weighted
                 if 'DSCR (current) T12 capped' in result_df.columns and 'Loan amount drawn EUR' in result_df.columns:
@@ -608,9 +640,9 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                 # 15. ICR (current) Weighted
                 if 'ICR (current) T12 capped' in result_df.columns and 'Loan commitment EUR' in result_df.columns:
                     result_df['ICR (current) Weighted'] = result_df['Loan commitment EUR'] * result_df['ICR (current) T12 capped']
-                
-                # 16. Debt yield (current) Weighted
+                  # 16. Debt yield (current) Weighted
                 if 'Debt yield (current)' in result_df.columns and 'Loan amount drawn EUR' in result_df.columns:
+                    result_df['Debt yield (current)'] = result_df['Debt yield (current)'] * 100
                     result_df['Debt yield (current) Weighted'] = result_df['Loan amount drawn EUR'] * result_df['Debt yield (current)']
                 
                 # 17. Impairment
@@ -700,7 +732,8 @@ def format_excel_worksheet(ws):
     
     percent_columns = [
         'Current coupon (p.a.)', 'Latest LTV', 'Debt yield (current)',
-        'LTV < 55%', '55% ≤ LTV < 65%', '65% ≤ LTV < 75%', '75% < LTV'
+        'LTV < 55%', '55% ≤ LTV < 65%', '65% ≤ LTV < 75%', '75% < LTV',
+        'Debt yield (current) Weighted', 'Latest LTV Weighted', 'Current coupon (p.a.) weighted'
     ]
     
     decimal_columns = [
@@ -954,7 +987,8 @@ def beautify_excel_output(template_bytes):
                                'Loan amount undrawn/ repaid (loan CCY)', 'Loan commitment EUR', 
                                'Loan amount drawn EUR', 'Loan amount undrawn/ repaid EUR']
             
-            percent_columns = ['Current coupon (p.a.)', 'Latest LTV', 'Debt yield (current)']
+            percent_columns = ['Current coupon (p.a.)', 'Latest LTV', 'Debt yield (current)',
+                           'Debt yield (current) Weighted', 'Latest LTV Weighted', 'Current coupon (p.a.) weighted']
             
             # Get column headers
             headers = [cell.value for cell in ws[1]]
@@ -1173,6 +1207,7 @@ def process_combined_files(reporting_date, all_files, watchlist_file, template_f
     
     # Final column selection and ordering
     final_columns = [
+        'Reporting Date',
         'Year',
         'Quarter',
         'Asset manager',
@@ -1210,8 +1245,7 @@ def process_combined_files(reporting_date, all_files, watchlist_file, template_f
         'Debt yield (current)',
         'Debt yield (current) Weighted',
         'Watchlist',
-        'Impairment',
-        'Reporting Date'
+        'Impairment'
     ]
     
     # Check which columns exist in the final_df
@@ -1344,6 +1378,7 @@ def process_files(asset_manager, reporting_date, input_files, watchlist_file=Non
         
         # Final column selection and ordering
         final_columns = [
+            'Reporting Date',
             'Year',
             'Quarter',
             'Asset manager',
@@ -1381,8 +1416,7 @@ def process_files(asset_manager, reporting_date, input_files, watchlist_file=Non
             'Debt yield (current)',
             'Debt yield (current) Weighted',
             'Watchlist',
-            'Impairment',
-            'Reporting Date'
+            'Impairment'
         ]
         
         # Check which columns exist in the final_df
@@ -1492,11 +1526,15 @@ def show_enhanced_documentation():
            - Cleans 'Watchlist' values: Red/Yellow -> Yes, others -> No
            - Normalizes LTV values by dividing by 100 if not already in decimal format
            - Maps property types to standardized categories for consistent sector analysis:
-             * Mixed, Various -> Other
+             * Mixed, Various, MIXED -> Other
              * MULTIFAM -> Residential
              * WAREHOUSE -> Logistics
              * RETAIL -> Retail
              * OFFICE -> Office
+             * Storage -> Other
+             * STORAGE -> Other
+             * APARTMENT -> Residential
+             * Logistic -> Logistics
         
         3. **Column Renaming**
            - Maps US-specific column names to standardized names
