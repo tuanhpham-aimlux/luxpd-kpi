@@ -729,7 +729,7 @@ def format_excel_worksheet(ws):
         'Loan amount undrawn/ repaid (loan CCY)', 'Loan commitment EUR', 
         'Loan amount drawn EUR', 'Loan amount undrawn/ repaid EUR'
     ]
-    
+
     percent_columns = [
         'Current coupon (p.a.)', 'Latest LTV', 'Debt yield (current)',
         'LTV < 55%', '55% ≤ LTV < 65%', '65% ≤ LTV < 75%', '75% < LTV',
@@ -1480,12 +1480,19 @@ def show_enhanced_documentation():
            - Automatically finds the header row in the Delta Master file
            - Headers are detected when there are at least 3 valid headers with no more than 5 consecutive NaN values at the beginning
            - This provides flexibility to handle files with various header positions
-        
-        2. **Data Cleaning**
+          2. **Data Cleaning**
            - Forward fills text columns and columns with 'year' in the name to handle hierarchical data
            - Removes rows where 'Asset Subportfolio' = 'Sum' to avoid duplicate counting
            - Converts percentage values to decimals (divides by 100) for proper calculations
            - Handles regional formatting issues (commas, dots in numbers)
+           - Maps property types in the 'Sector' column to standardized categories:
+             * Mixed, MIXED, Various, MEDICAL, Storage, STORAGE -> Other
+             * MULTIFAM -> Residential
+             * WAREHOUSE -> Logistics
+             * RETAIL -> Retail
+             * OFFICE -> Office
+             * APARTMENT -> Residential
+             * Logistic -> Logistics
         
         3. **Column Renaming**
            - Maps original column names to standardized names for consistency across regions
@@ -1501,7 +1508,7 @@ def show_enhanced_documentation():
         
         5. **Country Correction**
            - Changes 'GB' to 'UK' for consistency across systems
-           - Sets 'Loan CCY' to 'UKP' for UK investments and 'EUR' for others
+           - Sets 'Loan CCY' to 'GBP' for UK investments and 'EUR' for others
         
         6. **Watchlist Integration**
            - Joins with watchlist data on 'Investment name' = 'Deal'
@@ -1526,13 +1533,11 @@ def show_enhanced_documentation():
            - Cleans 'Watchlist' values: Red/Yellow -> Yes, others -> No
            - Normalizes LTV values by dividing by 100 if not already in decimal format
            - Maps property types to standardized categories for consistent sector analysis:
-             * Mixed, Various, MIXED -> Other
+             * Mixed, Various, MIXED, MEDICAL, Storage, STORAGE -> Other
              * MULTIFAM -> Residential
              * WAREHOUSE -> Logistics
              * RETAIL -> Retail
              * OFFICE -> Office
-             * Storage -> Other
-             * STORAGE -> Other
              * APARTMENT -> Residential
              * Logistic -> Logistics
         
