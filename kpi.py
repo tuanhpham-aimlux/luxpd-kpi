@@ -595,10 +595,11 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                     if pd.isna(style):
                         return None
                     style_lower = str(style).lower()
-                    if 'core' in style_lower:
-                        return 'PPRE EU Core'
-                    elif 'enhanced' in style_lower:
+                    if 'enhanced' in style_lower:
                         return 'PPRE EU Enhanced'
+                    elif 'core' in style_lower:
+                        return 'PPRE EU Core'
+
                     return None
                 
                 result_df['Strategy'] = result_df['Investment style'].apply(determine_strategy)
