@@ -229,7 +229,8 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             'Storage': 'Other',
             'STORAGE': 'Other',
             'APARTMENT': 'Residential',
-            'Logistic': 'Logistics'
+            'Logistic': 'Logistics',
+            'INDUSTRIAL':'Industrial'
         }
         
         df['PROPERTY_TYPE'] = df['PROPERTY_TYPE'].apply(
@@ -551,7 +552,8 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                     'Storage': 'Other',
                     'STORAGE': 'Other',
                     'APARTMENT': 'Residential',
-                    'Logistic': 'Logistics'
+                    'Logistic': 'Logistics',
+                    'INDUSTRIAL':'Industrial'
                 }
                 
                 if 'Sector' in result_df.columns:
