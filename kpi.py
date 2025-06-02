@@ -1496,6 +1496,7 @@ def show_enhanced_documentation():
              * OFFICE -> Office
              * APARTMENT -> Residential
              * Logistic -> Logistics
+             * INDUSTRIAL -> Industrial
         
         3. **Column Renaming**
            - Maps original column names to standardized names for consistency across regions
@@ -1543,6 +1544,7 @@ def show_enhanced_documentation():
              * OFFICE -> Office
              * APARTMENT -> Residential
              * Logistic -> Logistics
+             * INDUSTRIAL -> Industrial
         
         3. **Column Renaming**
            - Maps US-specific column names to standardized names
