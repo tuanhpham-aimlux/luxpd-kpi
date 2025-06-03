@@ -276,7 +276,7 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
                     df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
         
         df['Latest LTV'] = df['Latest LTV'] * 100  # Convert to percentage
-        df['Current coupon (p.a.)'] = df['Current coupon (p.a.)'] * 100  # Convert to percentage
+        df['Current coupon (p.a.)'] = df['Current coupon (p.a.)']  # Convert to percentage
         # Add calculated columns
         
         # Basic info columns
@@ -347,7 +347,7 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             axis=1
         )
           # Debt yield weighted
-        df['Debt yield (current)'] = df['Debt yield (current)']*100
+        df['Debt yield (current)'] = df['Debt yield (current)']
         df['Debt yield (current) Weighted'] = df['Loan amount drawn EUR'] * df['Debt yield (current)'] 
         
         # Empty impairment
