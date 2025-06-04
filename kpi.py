@@ -669,7 +669,9 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                 
                 # 19. "Loan CCY" column based on Country 
                 if asset_manager.upper() == 'PPRE EU' and 'Country' in result_df.columns:
-                    result_df['Loan CCY'] = result_df['Country'].apply(lambda x: 'GBP' if x == 'UK' else 'EUR')
+                    result_df['Loan CCY'] = result_df['Country'].apply(
+                        lambda x: 'GBP' if x == 'UK' else ('SEK' if x == 'SE' else 'EUR')
+                    )
                 
                 # 20. Add empty columns for PPRE EU
                 if asset_manager.upper() == 'PPRE EU':
