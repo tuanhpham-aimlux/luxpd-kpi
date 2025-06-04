@@ -278,7 +278,11 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
         df['Latest LTV'] = df['Latest LTV'] * 100  # Convert to percentage
         df['Current coupon (p.a.)'] = df['Current coupon (p.a.)']  # Convert to percentage
         # Add calculated columns
-        
+        # NEW: Convert 'Fixed vs. Floating' column to proper case
+        if 'Fixed vs. Floating' in df.columns:
+            df['Fixed vs. Floating'] = df['Fixed vs. Floating'].apply(
+                lambda x: x.title() if pd.notna(x) and isinstance(x, str) else x
+            )
         # Basic info columns
         df['Year'] = year
         df['Reporting Date'] = reporting_date
@@ -560,7 +564,12 @@ def read_delta_master_eu(file_bytes, asset_manager, year, reporting_date, quarte
                     result_df['Sector'] = result_df['Sector'].apply(
                         lambda x: property_type_mapping.get(x, x) if pd.notna(x) else x
                     )
-                
+                # NEW: Convert 'Fixed vs. Floating' column to proper case
+                if 'Fixed vs. Floating' in result_df.columns:
+                    result_df['Fixed vs. Floating'] = result_df['Fixed vs. Floating'].apply(
+                        lambda x: x.title() if pd.notna(x) and isinstance(x, str) else x
+                    )
+    
                 # Convert numeric columns to appropriate types for calculations
                 numeric_columns = [
                     'Loan commitment EUR', 'Loan amount drawn EUR', 'Latest LTV', 
