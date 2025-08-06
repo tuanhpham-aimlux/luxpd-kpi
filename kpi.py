@@ -72,7 +72,7 @@ def safe_concat(dataframes):
     else:
         return pd.DataFrame(columns=list(all_columns))
 
-def get_exchange_rate(date_obj, method="fixed"):
+def get_exchange_rate(date_obj, method="auto"):
     """
     Get USD/EUR exchange rate for a given date using various methods.
     Compatible with Python 3.12 (no pandas_datareader dependency)
@@ -83,17 +83,31 @@ def get_exchange_rate(date_obj, method="fixed"):
     # Fixed rate fallback
     FIXED_RATE = 0.92
     
+    # Auto mode tries ECB first, then Yahoo, then fixed rate
+    if method == "auto":
+        # Try ECB first
+        try:
+            return get_exchange_rate(date_obj, method="ecb")
+        except:
+            st.info("ECB API unavailable, trying Yahoo Finance...")
+            try:
+                return get_exchange_rate(date_obj, method="yahoo")
+            except:
+                st.info("Yahoo Finance unavailable, using fixed rate...")
+                return FIXED_RATE
+    
     try:
         if method == "ecb":
             # European Central Bank historical data
             test_date = date_obj
-            max_attempts = 5  # Try up to 5 days back
+            max_attempts = 3  # Reduced attempts to fail faster
             attempts = 0
             
             while attempts < max_attempts:
                 try:
                     url = f"https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
-                    response = requests.get(url)
+                    # Add timeout to fail faster on connection issues
+                    response = requests.get(url, timeout=10)
                     
                     if response.status_code == 200:
                         # Parse XML response
@@ -103,19 +117,22 @@ def get_exchange_rate(date_obj, method="fixed"):
                         namespaces = {'ns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
                         for cube in root.findall('.//ns:Cube[@currency="USD"]', namespaces):
                             usd_eur_rate = 1 / float(cube.attrib['rate'])
-                            st.write(f"Retrieved ECB exchange rate for {test_date.strftime('%Y-%m-%d')}: {usd_eur_rate}")
+                            st.success(f"Retrieved ECB exchange rate for {test_date.strftime('%Y-%m-%d')}: {usd_eur_rate:.4f}")
                             return usd_eur_rate
                     
                     # Try previous day
                     test_date -= timedelta(days=1)
                     attempts += 1
                 except Exception as e:
-                    st.warning(f"Error with ECB API: {e}")
-                    test_date -= timedelta(days=1)
+                    if "getaddrinfo failed" in str(e) or "NameResolutionError" in str(e):
+                        st.warning("Network connectivity issue - cannot reach ECB servers")
+                        break
+                    else:
+                        st.warning(f"ECB API error (attempt {attempts + 1}): {str(e)[:100]}...")
                     attempts += 1
             
-            st.warning("Could not retrieve ECB data, using fixed rate")
-            return FIXED_RATE
+            # If we're here, ECB failed - raise exception to trigger fallback
+            raise Exception("ECB API unavailable")
             
         elif method == "yahoo":
             # Use Yahoo Finance data directly without pandas_datareader
@@ -200,13 +217,13 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             st.error("No rows with Asset Manager in ['ARE', 'JPM', 'PPRE'] found in the file.")
             return pd.DataFrame()
             
-        st.info(f"Filtered to {len(df)} rows with Asset Manager in ['ARE', 'JPM']")
+        st.info(f"Filtered to {len(df)} rows with Asset Manager in ['ARE', 'JPM', 'PPRE']")
         
         # Clean and transform the data
         
         # 1. Replace 'ARE' with 'PPRE US'
         df['Asset Manager'] = df['Asset Manager'].replace('ARE', 'PPRE US')
-        
+        df['Asset Manager'] = df['Asset Manager'].replace('PPRE', 'PPRE US')
         # 2. Clean Watchlist column
         df['Watchlist'] = df['Watchlist'].apply(
             lambda x: 'Yes' if pd.notna(x) and str(x).strip() in ['Yellow', 'Red'] else 'No'
@@ -1147,10 +1164,8 @@ def process_combined_files(reporting_date, all_files, watchlist_file, template_f
     watchlist_sheet = f"{year}{quarter}"
     
     # Get exchange rate for PPRE US case
-    usd_eur_fx = get_exchange_rate(date_obj, method="ecb")
-    st.info(f"Using USD/EUR exchange rate: {usd_eur_fx} for {reporting_date}")
-    
-    # Separate files into EU and US
+    usd_eur_fx = get_exchange_rate(date_obj, method="auto")
+    st.info(f"Using USD/EUR exchange rate: {usd_eur_fx} for {reporting_date}")    # Separate files into EU and US
     delta_files = [f for f in all_files if 'Delta' in f.name]
     azl_files = [f for f in all_files if 'AZL' in f.name]
     
@@ -1321,7 +1336,7 @@ def process_files(asset_manager, reporting_date, input_files, watchlist_file=Non
             return process_combined_files(reporting_date, input_files, watchlist_file, template_file)
         
         # Get exchange rate for reporting date (for PPRE US case)
-        usd_eur_fx = get_exchange_rate(date_obj, method="ecb")
+        usd_eur_fx = get_exchange_rate(date_obj, method="auto")
         st.info(f"Using USD/EUR exchange rate: {usd_eur_fx} for {reporting_date}")
         
         # Process based on asset manager
