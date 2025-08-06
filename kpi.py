@@ -193,11 +193,11 @@ def read_delta_master_us(file_bytes, asset_manager, year, reporting_date, quarte
             st.error("None of the required columns were found in the US file.")
             return pd.DataFrame()
             
-        # Filter rows where Asset Manager is in ['ARE', 'JPM']
-        df = df[df['Asset Manager'].isin(['ARE', 'JPM'])].copy()
+        # Filter rows where Asset Manager is in ['ARE', 'JPM', 'PPRE']
+        df = df[df['Asset Manager'].isin(['ARE', 'JPM', 'PPRE'])].copy()
         
         if df.empty:
-            st.error("No rows with Asset Manager in ['ARE', 'JPM'] found in the file.")
+            st.error("No rows with Asset Manager in ['ARE', 'JPM', 'PPRE'] found in the file.")
             return pd.DataFrame()
             
         st.info(f"Filtered to {len(df)} rows with Asset Manager in ['ARE', 'JPM']")
@@ -1540,7 +1540,7 @@ def show_enhanced_documentation():
         
         **Processing Steps:**
         1. **Data Filtering**
-           - Selects rows where 'Asset Manager' is 'ARE' or 'JPM'
+           - Selects rows where 'Asset Manager' is 'ARE' or 'JPM' or 'PPRE'
            - Changes 'ARE' to 'PPRE US' for consistent naming
            - Filters out irrelevant data early in the process
         
@@ -1887,7 +1887,7 @@ def main():
                                          help="Upload files containing US data. Files with 'AZL' in the name will be auto-detected.")
             watchlist_file = None
         else:  # Combined mode
-            input_files = st.file_uploader("Upload All Data Files", 
+            input_files = st.file_uploader("Upload All Data Files (both US and EU)", 
                                          accept_multiple_files=True,
                                          type=["xlsx", "xls"],
                                          help="Upload all files for processing. Files with 'Delta' will be processed as EU files, files with 'AZL' as US files.")
