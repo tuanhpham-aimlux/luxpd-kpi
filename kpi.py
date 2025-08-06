@@ -1829,11 +1829,34 @@ def main():
         with col2:
             # Use a date picker instead of text input
             today = datetime.today()
-            last_day_of_previous_quarter = datetime(
-                today.year - (1 if today.month < 4 else 0),
-                12 if today.month < 4 else (3 if today.month < 7 else 6 if today.month < 10 else 9),
-                31 if today.month < 4 or 7 <= today.month < 10 else 30
-            )
+            
+            # Calculate the last day of the previous quarter
+            if today.month <= 3:  # Q1
+                quarter_end_month = 12
+                quarter_end_year = today.year - 1
+            elif today.month <= 6:  # Q2
+                quarter_end_month = 3
+                quarter_end_year = today.year
+            elif today.month <= 9:  # Q3
+                quarter_end_month = 6
+                quarter_end_year = today.year
+            else:  # Q4
+                quarter_end_month = 9
+                quarter_end_year = today.year
+            
+            # Get the actual last day of the quarter month
+            if quarter_end_month in [1, 3, 5, 7, 8, 10, 12]:
+                last_day = 31
+            elif quarter_end_month in [4, 6, 9, 11]:
+                last_day = 30
+            else:  # February
+                # Check for leap year
+                if quarter_end_year % 4 == 0 and (quarter_end_year % 100 != 0 or quarter_end_year % 400 == 0):
+                    last_day = 29
+                else:
+                    last_day = 28
+            
+            last_day_of_previous_quarter = datetime(quarter_end_year, quarter_end_month, last_day)
             
             reporting_date_obj = st.date_input(
                 "Reporting Date",
